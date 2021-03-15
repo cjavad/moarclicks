@@ -1,0 +1,38 @@
+name: moarclicks
+version: "2.0.0"
+author: Javad S. <javadscript@gmx.com>
+about: Does awesome things
+args:
+    - min_cps:
+        short: C
+        long: cps
+        value_name: NUMBER
+        help: Minimum activaction CPS for enhance to start
+        takes_value: true
+        default_value: "2"
+    - extra_clicks:
+        short: c
+        long: clicks
+        value_name: NUMBER
+        help: Amount of clicks to prepend every click 
+        takes_value: true
+        default_value: "3"
+    - min_delay_ms: 
+        long: minD
+        value_name: NUMBER
+        help: Min delay in MS
+        takes_value: true
+        default_value: "100"
+    - max_delay_ms:
+        long: maxD
+        value_name: NUMBER
+        help: Max delay in MS
+        takes_value: true
+        default_value: "500"
+    - weighted_rand_delay:
+        short: r
+        long: rand
+        value_name: FLOAT
+        help: Chance to randomize delay
+        takes_value: true
+        default_value: "0.5"
