@@ -25,8 +25,14 @@ pub enum Click {
     RightClick(MouseButton, u128),
 }
 
+pub enum Action {
+    Click(MouseButton),
+    Delay(Duration),
+}
+
 pub struct ClickHistory {
     pub last_clicked: u128,
+    pub queue_renew: bool,
     pub skip_clicks: i32,
 }
 
@@ -35,12 +41,14 @@ impl ClickHistory {
         ClickHistory {
             last_clicked: 0,
             skip_clicks: 0,
+            queue_renew: true
         }
     }
 }
 
 pub struct Clicker {
     pub enigo: Enigo,
+    pub click_queue: Vec<Action>,
     pub min_cps: i32,
     pub extra_clicks: i32,
     pub min_delay_ns: u32,
@@ -75,6 +83,7 @@ impl Clicker {
 
         Clicker {
             enigo: Enigo::new(),
+            click_queue: Vec::new(),
             min_cps,
             extra_clicks,
             min_delay_ns,
@@ -86,49 +95,84 @@ impl Clicker {
         }
     }
 
-    pub fn click(&mut self, amount: i32, button: MouseButton) {
+    pub fn add_queue(&mut self, amount: i32, button: MouseButton) {
         let mut rng = thread_rng();
 
         for _ in 0..amount {
-            self.enigo.mouse_click(button);
-            sleep(Duration::new(
+            self.click_queue.push(Action::Click(button));
+            self.click_queue.push(Action::Delay(Duration::new(
                 0,
                 match rng.gen_range(0.0..1.0) {
                     n if n < self.weighted_rand_delay => self.min_delay_ns,
                     _ => rng.gen_range(self.min_delay_ns..self.max_delay_ns),
                 },
-            ))
+            )));
         }
     }
 
     pub fn enhance_click(&mut self, button: MouseButton) {
-        self.click(self.extra_clicks, button)
+        self.add_queue(self.extra_clicks, button)
+    }
+
+    pub fn execute_queue(&mut self) {
+        for action in &self.click_queue {
+            match action {
+                Action::Click(button) => match button {
+                    MouseButton::Left => {
+                        if self.left_clicks.queue_renew {
+                            self.enigo.mouse_click(MouseButton::Left)
+                        }
+                    },
+                    MouseButton::Right => {
+                        if self.right_clicks.queue_renew {
+                            self.enigo.mouse_click(MouseButton::Right)
+                        }
+                    },
+                    _ => {}
+                },
+                Action::Delay(duration) => sleep(duration.clone()),
+            }
+        }
     }
 
     pub fn next_tick(&mut self) {
         match self.receiver.recv().unwrap() {
             Click::LeftClick(button, time) => {
+                self.left_clicks.queue_renew = false;
+                self.click_queue = Vec::new();
+
                 if self.left_clicks.skip_clicks > 0 {
                     self.left_clicks.skip_clicks -= 1;
                     return;
                 }
 
                 if time - self.left_clicks.last_clicked < (1000 / self.min_cps) as u128 {
+                    self.left_clicks.queue_renew = true;
                     self.left_clicks.skip_clicks += self.extra_clicks;
                     self.enhance_click(button);
+                } else {
+                    self.click_queue = Vec::new();
                 }
                 self.left_clicks.last_clicked = time;
             }
             Click::RightClick(button, time) => {
+                self.right_clicks.queue_renew = false;
+                self.click_queue = Vec::new();
+
                 if self.right_clicks.skip_clicks > 0 {
                     self.right_clicks.skip_clicks -= 1;
                     return;
                 }
 
                 if time - self.right_clicks.last_clicked < (1000 / self.min_cps) as u128 {
+                    self.right_clicks.queue_renew = true;
+
                     self.right_clicks.skip_clicks += self.extra_clicks;
                     self.enhance_click(button);
+                } else {
+                    self.click_queue = Vec::new();
                 }
+
                 self.right_clicks.last_clicked = time;
             }
         }
@@ -193,5 +237,6 @@ fn main() {
 
     loop {
         clicker.next_tick();
+        clicker.execute_queue();
     }
 }
